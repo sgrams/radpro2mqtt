@@ -25,7 +25,7 @@ const RECONNECT_MAX: Duration = Duration::from_secs(60);
 /// How long a serial link must survive to count as healthy and earn a backoff reset.
 const HEALTHY_LINK: Duration = Duration::from_secs(60);
 
-#[tokio::main]
+#[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(

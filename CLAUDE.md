@@ -44,7 +44,12 @@ A single-binary bridge: serial in, MQTT out. Four modules, each with one job.
   Assistant sensor configs. Adding a reading means adding a field to `Measurement`
   *and* a row here; the key must match the serde field name, since the value
   template is built from it.
-- `main.rs` — wiring. The rumqttc event loop runs in its own task (it drives
+- `main.rs` — wiring. The runtime is deliberately `current_thread`: the whole
+  program is two tasks that spend their lives blocked on a serial read or a
+  socket, and a worker per core cost ~64 MB of glibc malloc arena reservation
+  each (1.9 GB of virtual address space on a 28-core box, against 5 MB RSS).
+  Nothing here is CPU bound, so nothing may block the thread. The rumqttc event
+  loop runs in its own task (it drives
   reconnects and flushes queued publishes, so it must poll even while the serial
   side is down); `bridge()` owns serial reconnection with exponential backoff;
   `poll_device()` returns `Result<Infallible>` because it only ever exits by error.
