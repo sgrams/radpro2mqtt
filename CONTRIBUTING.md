@@ -12,7 +12,11 @@ SPDX-License-Identifier: AGPL-3.0-or-later
 cargo fmt
 cargo clippy --all-targets
 cargo test
+reuse lint
 ```
+
+All four run in CI on every push and pull request, with clippy warnings treated
+as errors, so it is quicker to run them here first.
 
 Changes to the serial protocol or reconnect logic cannot be covered by the test
 suite — exercise them against a fake device first, as described in `CLAUDE.md`.

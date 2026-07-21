@@ -6,6 +6,8 @@ SPDX-License-Identifier: AGPL-3.0-or-later
 
 # radpro2mqtt
 
+[![CI](https://github.com/sgrams/radpro2mqtt/actions/workflows/ci.yml/badge.svg)](https://github.com/sgrams/radpro2mqtt/actions/workflows/ci.yml)
+
 Bridges a Geiger counter running [Rad Pro](https://github.com/Gissio/radpro) firmware to
 MQTT over its USB serial port, with Home Assistant discovery so the sensors appear
 automatically.
