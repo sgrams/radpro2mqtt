@@ -62,6 +62,25 @@ Fields the firmware does not support are omitted, and no discovery config is
 published for them. Run one instance per counter, with a distinct `--node-id` and
 `--client-id` for each.
 
+## Running as a service
+
+`packaging/` holds a systemd unit and an environment file template:
+
+```sh
+sudo install -Dm755 target/release/radpro2mqtt /usr/local/bin/radpro2mqtt
+sudo install -Dm600 packaging/radpro2mqtt.env.example /etc/radpro2mqtt.env
+sudo install -Dm644 packaging/radpro2mqtt.service /etc/systemd/system/radpro2mqtt.service
+sudoedit /etc/radpro2mqtt.env          # port, broker URL, credentials
+sudo systemctl enable --now radpro2mqtt
+journalctl -u radpro2mqtt -f
+```
+
+The service runs unprivileged under a `DynamicUser`, with access to nothing but
+the network and `/dev/ttyACM*`. It joins the group owning that device — `uucp`,
+as shipped; change `SupplementaryGroups=` to `dialout` on Debian or Ubuntu.
+Credentials live in the environment file rather than the command line, so they
+stay out of `ps` output.
+
 ## Message rate
 
 One state message per `--interval` (default 10s, so 6/min). Discovery is sent once

@@ -1,0 +1,55 @@
+# SPDX-FileCopyrightText: 2026 Stan Grams <sjg@haxx.space>
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
+[Unit]
+Description=Rad Pro Geiger counter to MQTT bridge
+Documentation=https://github.com/sgrams/radpro2mqtt
+After=network-online.target
+Wants=network-online.target
+
+# The bridge reconnects to both links on its own, so restarts should be rare.
+# Give up only if it is crashing outright.
+StartLimitIntervalSec=300
+StartLimitBurst=10
+
+[Service]
+Type=exec
+EnvironmentFile=/etc/radpro2mqtt.env
+ExecStart=/usr/local/bin/radpro2mqtt $RADPRO_ARGS
+Restart=always
+RestartSec=5s
+
+# Unprivileged, with access to the serial device only. uucp owns /dev/ttyACM*
+# on Arch; use dialout on Debian and Ubuntu.
+DynamicUser=yes
+SupplementaryGroups=uucp
+PrivateDevices=yes
+DeviceAllow=char-ttyACM rw
+
+# It needs nothing but a socket and that device.
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ProtectProc=invisible
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+SystemCallArchitectures=native
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target
