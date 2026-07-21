@@ -114,6 +114,7 @@ pub fn configs(cli: &Cli, info: Option<&DeviceInfo>, sample: &Value) -> Vec<(Str
                 "value_template": format!("{{{{ value_json.{} }}}}", e.key),
                 "unit_of_measurement": e.unit,
                 "state_class": e.state_class,
+                "expire_after": cli.expire_after(),
                 "suggested_display_precision": e.precision,
                 "device": device,
             });
@@ -174,6 +175,22 @@ mod tests {
         assert_eq!(config["state_topic"], cli.state_topic());
         assert_eq!(config["availability_topic"], cli.availability_topic());
         assert_eq!(config["value_template"], "{{ value_json.rate_cpm }}");
+    }
+
+    #[test]
+    fn readings_expire_after_a_few_intervals_but_never_too_soon() {
+        let sample = json!({ "rate_cpm": 12.0 });
+
+        let slow = Cli::parse_from(["radpro2mqtt", "-b", "mqtt://localhost", "-i", "60"]);
+        let (_, payload) = configs(&slow, None, &sample).remove(0);
+        let config: Value = serde_json::from_str(&payload).unwrap();
+        assert_eq!(config["expire_after"], 180);
+
+        // A one second interval must not expire on ordinary jitter.
+        let fast = Cli::parse_from(["radpro2mqtt", "-b", "mqtt://localhost", "-i", "1"]);
+        let (_, payload) = configs(&fast, None, &sample).remove(0);
+        let config: Value = serde_json::from_str(&payload).unwrap();
+        assert_eq!(config["expire_after"], 30);
     }
 
     #[test]

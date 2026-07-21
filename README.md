@@ -109,6 +109,12 @@ while availability is published as `offline`. Backoff only resets once a link ha
 stayed up for a minute, so a device that connects and immediately drops backs off
 instead of retrying in a tight loop.
 
+The discovery configs also carry `expire_after`, set to three poll intervals (at
+least 30s). The will message covers a bridge that dies, but not one wedged with a
+live connection and a silent device; with `expire_after`, Home Assistant marks the
+sensors unavailable on its own once readings stop arriving, instead of showing a
+stale value indefinitely.
+
 ## License
 
 AGPL-3.0-or-later.

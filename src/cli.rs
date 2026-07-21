@@ -71,4 +71,15 @@ impl Cli {
     pub fn availability_topic(&self) -> String {
         format!("{}/{}/availability", self.topic_prefix, self.node_id)
     }
+
+    /// How long Home Assistant should trust a reading before marking the sensor
+    /// unavailable.
+    ///
+    /// The will message covers a bridge that dies, but not one wedged with a
+    /// live connection and a silent device. Three intervals tolerates a missed
+    /// poll or two; the floor keeps very short intervals from expiring on
+    /// ordinary network jitter.
+    pub fn expire_after(&self) -> u64 {
+        (self.interval * 3).max(30)
+    }
 }
