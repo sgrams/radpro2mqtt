@@ -10,12 +10,28 @@ Bridges a Geiger counter running [Rad Pro](https://github.com/Gissio/radpro) fir
 MQTT over its USB serial port, with Home Assistant discovery so the sensors appear
 automatically.
 
+## Building
+
+Needs a stable Rust toolchain; there are no system dependencies beyond a C
+toolchain for the serial crate.
+
+```sh
+cargo build --release
+```
+
+The binary lands in `target/release/radpro2mqtt`. `cargo run -- <args>` builds and
+runs in one step during development.
+
 ## Usage
 
 ```sh
 radpro2mqtt --port /dev/ttyACM0 --mqtt-url mqtt://broker.lan:1883 \
             --mqtt-username geiger --mqtt-password secret
 ```
+
+Reading the serial port needs membership of the group owning `/dev/ttyACM*` —
+`uucp` on Arch, `dialout` on Debian and Ubuntu. For a permanent install prefer a
+stable `/dev/serial/by-id/...` path, since `ttyACM0` can renumber between boots.
 
 Every flag has an equivalent environment variable (`RADPRO_PORT`, `MQTT_URL`,
 `MQTT_USERNAME`, `MQTT_PASSWORD`, `MQTT_CLIENT_ID`); see `radpro2mqtt --help` for the
