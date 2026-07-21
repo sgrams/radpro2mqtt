@@ -24,7 +24,13 @@ RestartSec=5s
 # on Arch; use dialout on Debian and Ubuntu.
 DynamicUser=yes
 SupplementaryGroups=uucp
-PrivateDevices=yes
+
+# Deliberately NOT PrivateDevices=yes: that replaces /dev with API pseudo
+# devices only, so neither /dev/ttyACM* nor the /dev/serial/by-id symlinks
+# exist for the service and every poll fails with ENOENT. DevicePolicy=closed
+# with the allow list below restricts access to the counter without hiding it.
+PrivateDevices=no
+DevicePolicy=closed
 DeviceAllow=char-ttyACM rw
 
 # It needs nothing but a socket and that device.
