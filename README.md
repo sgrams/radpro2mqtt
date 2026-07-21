@@ -8,73 +8,124 @@ SPDX-License-Identifier: AGPL-3.0-or-later
 
 [![CI](https://github.com/sgrams/radpro2mqtt/actions/workflows/ci.yml/badge.svg)](https://github.com/sgrams/radpro2mqtt/actions/workflows/ci.yml)
 
-Bridges a Geiger counter running [Rad Pro](https://github.com/Gissio/radpro) firmware to
-MQTT over its USB serial port, with Home Assistant discovery so the sensors appear
-automatically.
+Reads a Geiger counter running [Rad Pro](https://github.com/Gissio/radpro) firmware
+over USB serial and publishes its measurements to MQTT. Home Assistant discovers the
+sensors on its own; there is nothing to add to `configuration.yaml`.
 
-## Building
+Rad Pro runs on the FS2011, Bosean FS-600/FS-1000/FS-5000, FNIRSI GC-01/GC-03 and
+GQ GMC-800, among others. This bridge talks to whatever that firmware exposes, so
+readings the device does not support are simply left out.
 
-Needs a stable Rust toolchain; there are no system dependencies beyond a C
-toolchain for the serial crate.
+## Entities
+
+| Entity | Unit | Notes |
+| --- | --- | --- |
+| Count rate | cpm | the firmware's own figure, quick to react |
+| Average count rate | cpm | mean over the poll interval, steadier |
+| Dose rate | µSv/h | from the tube sensitivity the device reports |
+| Pulse count | counts | lifetime total, `total_increasing` |
+| Tube lifetime | s | diagnostic |
+| Battery voltage | V | diagnostic, if the firmware reports it |
+
+### Why two count rates
+
+Radioactive decay is a Poisson process. At background levels a short window holds
+only a handful of counts, so an instantaneous rate swings widely — most of that
+movement is counting statistics, not radiation.
+
+`rate_cpm` is what the firmware reports and responds quickly when a source is
+brought near the tube. `avg_rate_cpm` is computed here from the growth of the pulse
+counter over the poll interval: it is an exact mean rather than an estimate, and it
+gets steadier the longer the interval. Graph the average, alert on the
+instantaneous one.
+
+## Build
+
+Needs a stable Rust toolchain and a C toolchain for the serial crate; nothing else.
 
 ```sh
 cargo build --release
 ```
 
-The binary lands in `target/release/radpro2mqtt`. `cargo run -- <args>` builds and
-runs in one step during development.
+The binary lands in `target/release/radpro2mqtt`. During development
+`cargo run -- <args>` builds and runs in one step.
 
-## Usage
+## Quick start
 
 ```sh
 radpro2mqtt --port /dev/ttyACM0 --mqtt-url mqtt://broker.lan:1883 \
             --mqtt-username geiger --mqtt-password secret
 ```
 
-Reading the serial port needs membership of the group owning `/dev/ttyACM*` —
-`uucp` on Arch, `dialout` on Debian and Ubuntu. For a permanent install prefer a
-stable `/dev/serial/by-id/...` path, since `ttyACM0` can renumber between boots.
+Reading the serial port requires membership of the group that owns `/dev/ttyACM*`:
+`uucp` on Arch, `dialout` on Debian and Ubuntu. Prefer a stable
+`/dev/serial/by-id/...` path for anything permanent, since `ttyACM0` can renumber
+between reboots — `ls -l /dev/serial/by-id/` shows yours.
 
-Every flag has an equivalent environment variable (`RADPRO_PORT`, `MQTT_URL`,
-`MQTT_USERNAME`, `MQTT_PASSWORD`, `MQTT_CLIENT_ID`); see `radpro2mqtt --help` for the
-full list. Credentials may also be embedded in the URL (`mqtt://user:pass@host`), in
-which case the flags take precedence. `mqtts://` connects over TLS using the system
-root certificates.
+`RUST_LOG=radpro2mqtt=debug` logs every poll and publish, which is the quickest way
+to see what your firmware does and does not answer.
 
-Set `RUST_LOG=radpro2mqtt=debug` for per-poll detail.
+## Configuration
+
+| Option | Environment | Default | Notes |
+| --- | --- | --- | --- |
+| `-p`, `--port` | `RADPRO_PORT` | `/dev/ttyACM0` | serial device |
+| `--baud` | `RADPRO_BAUD` | `115200` | Rad Pro uses 115200 8N1 |
+| `-b`, `--mqtt-url` | `MQTT_URL` | — | `mqtt://host:1883` or `mqtts://host:8883` |
+| `-u`, `--mqtt-username` | `MQTT_USERNAME` | — | |
+| `-P`, `--mqtt-password` | `MQTT_PASSWORD` | — | |
+| `--client-id` | `MQTT_CLIENT_ID` | `radpro2mqtt` | must be unique on the broker |
+| `-i`, `--interval` | | `10` | seconds between polls |
+| `--timeout` | | `5` | seconds to wait for one serial reply |
+| `--topic-prefix` | | `radpro` | |
+| `--node-id` | | `radpro` | must be unique per counter |
+| `--device-name` | | `Rad Pro` | shown in Home Assistant |
+| `--discovery-prefix` | | `homeassistant` | |
+| `--retain` | | off | retain state messages |
+| `--no-discovery` | | off | skip the discovery configs |
+
+`mqtts://` uses the system root certificates. Credentials may also be embedded in
+the URL (`mqtt://user:pass@host`); the flags win if both are given. Passing them by
+environment keeps them out of `ps` output and shell history.
+
+To run more than one counter, give each instance its own `--node-id` and
+`--client-id`.
 
 ## Topics
 
-With the defaults (`--topic-prefix radpro`, `--node-id radpro`):
+With the defaults:
 
 | Topic | Retained | Contents |
 | --- | --- | --- |
 | `radpro/radpro/state` | with `--retain` | JSON of all readings |
 | `radpro/radpro/availability` | yes | `online` / `offline`, also the MQTT will |
-| `homeassistant/sensor/radpro/<field>/config` | yes | discovery config per sensor |
-
-State payload:
+| `homeassistant/sensor/radpro/<field>/config` | yes | one discovery config per sensor |
 
 ```json
 {"rate_cpm":18.45,"avg_rate_cpm":19.2,"dose_rate_usvh":0.12,"pulse_count":1007,"tube_time_s":86400,"battery_voltage":4.05}
 ```
 
-There are two count rates, and they answer different questions. `rate_cpm` is the
-firmware's own figure, which responds quickly to a source being brought near the
-tube. `avg_rate_cpm` is the mean over the poll interval, computed here from the
-growth of the pulse counter; radioactive decay is a Poisson process, so at
-background levels a short window sees only a handful of counts and the
-instantaneous figure swings widely. The longer your `--interval`, the steadier
-`avg_rate_cpm` gets. Use it for graphs and history, and `rate_cpm` when you want
-the device to react.
+Nothing is published until the second poll of a connection, because the average
+needs two counter readings. Discovery configs are published only for the fields
+that first reading actually contained, so no entity is ever created that would sit
+forever unknown.
 
-Because that mean needs two counter readings, nothing is published until the
-second poll of a connection — one interval after start-up.
+## Reliability
 
-`dose_rate_usvh` is derived from the tube sensitivity reported by the device.
-Fields the firmware does not support are omitted, and no discovery config is
-published for them. Run one instance per counter, with a distinct `--node-id` and
-`--client-id` for each.
+One state message per interval — six a minute by default. Discovery is sent once
+per run and availability only when it changes, so an unstable device cannot flood
+the broker with retained messages.
+
+Both links recover on their own. MQTT reconnects through the client's event loop.
+The serial port is reopened with exponential backoff from 1s to 60s, publishing
+`offline` while it is down; the backoff only resets after a link has stayed up for
+a minute, so a device that connects and immediately drops is not retried in a tight
+loop.
+
+Three separate failures are covered: the retained will message handles the bridge
+dying, `offline` handles the counter being unplugged, and `expire_after` — three
+intervals, at least 30s — handles a bridge left holding a live broker connection to
+a silent device, where Home Assistant would otherwise show a stale reading forever.
 
 ## Running as a service
 
@@ -89,32 +140,19 @@ sudo systemctl enable --now radpro2mqtt
 journalctl -u radpro2mqtt -f
 ```
 
-The service runs unprivileged under a `DynamicUser`, with access to nothing but
-the network and `/dev/ttyACM*`. It joins the group owning that device — `uucp`,
-as shipped; change `SupplementaryGroups=` to `dialout` on Debian or Ubuntu.
-Credentials live in the environment file rather than the command line, so they
-stay out of `ps` output.
+The service runs unprivileged under a `DynamicUser` with access to nothing but a
+socket and `/dev/ttyACM*`, and joins the group owning that device — `uucp` as
+shipped, so change `SupplementaryGroups=` on Debian or Ubuntu.
 
-## Message rate
+## Development
 
-One state message per `--interval` (default 10s, so 6/min). Discovery is sent once
-per run, and availability only when it changes, so an unstable device cannot flood
-the broker with retained messages.
+`cargo test` covers the pure logic. The device and broker halves are exercised by
+hand against a PTY pair and a stub broker; `CLAUDE.md` describes the setup, which
+also reproduces reconnect and backoff behaviour without touching hardware.
 
-## Behaviour
-
-The bridge keeps running when either link drops: MQTT reconnects via the client's
-event loop, and the serial port is reopened with exponential backoff (1s to 60s)
-while availability is published as `offline`. Backoff only resets once a link has
-stayed up for a minute, so a device that connects and immediately drops backs off
-instead of retrying in a tight loop.
-
-The discovery configs also carry `expire_after`, set to three poll intervals (at
-least 30s). The will message covers a bridge that dies, but not one wedged with a
-live connection and a silent device; with `expire_after`, Home Assistant marks the
-sensors unavailable on its own once readings stop arriving, instead of showing a
-stale value indefinitely.
+See `CONTRIBUTING.md` for commit conventions and the REUSE licensing headers.
 
 ## License
 
-AGPL-3.0-or-later.
+AGPL-3.0-or-later. The protocol implementation follows the Rad Pro
+[communication documentation](https://github.com/Gissio/radpro/blob/main/docs/comm.md).
