@@ -1,0 +1,14 @@
+version = 1
+SPDX-PackageName = "radpro2mqtt"
+SPDX-PackageSupplier = "Stan Grams <sjg@haxx.space>"
+SPDX-PackageDownloadLocation = "https://github.com/sgrams/radpro2mqtt"
+
+# Files that cannot carry a comment header, or that are generated and would
+# lose one on regeneration. `LICENSE` is a verbatim copy of
+# `LICENSES/AGPL-3.0-or-later.txt`, kept at the root because that is where
+# GitHub and most tooling look for it; its text must not be modified.
+[[annotations]]
+path = ["LICENSE", "Cargo.lock", ".gitignore"]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 Stan Grams <sjg@haxx.space>"
+SPDX-License-Identifier = "AGPL-3.0-or-later"

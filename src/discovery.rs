@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Stan Grams <sjg@haxx.space>
+//
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 //! Home Assistant MQTT discovery payloads.
 //!
 //! One `sensor` config per measurement field, all sharing a single JSON state

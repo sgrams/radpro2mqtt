@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 Stan Grams <sjg@haxx.space>
+
+SPDX-License-Identifier: AGPL-3.0-or-later
+-->
+
 # radpro2mqtt
 
 Bridges a Geiger counter running [Rad Pro](https://github.com/Gissio/radpro) firmware to

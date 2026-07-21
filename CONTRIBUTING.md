@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 Stan Grams <sjg@haxx.space>
+
+SPDX-License-Identifier: AGPL-3.0-or-later
+-->
+
 # Contributing
 
 ## Before you commit
@@ -10,6 +16,29 @@ cargo test
 
 Changes to the serial protocol or reconnect logic cannot be covered by the test
 suite — exercise them against a fake device first, as described in `CLAUDE.md`.
+
+## Licensing headers
+
+The repository follows [REUSE](https://reuse.software/) 3.3: every file carries
+an SPDX header, and `reuse lint` must stay clean.
+
+```
+// SPDX-FileCopyrightText: 2026 Stan Grams <sjg@haxx.space>
+//
+// SPDX-License-Identifier: AGPL-3.0-or-later
+```
+
+`reuse annotate` writes the header in the right comment syntax for you:
+
+```sh
+reuse annotate --copyright "Your Name <you@example.com>" --year "$(date +%Y)" \
+    --license AGPL-3.0-or-later --merge-copyrights path/to/new_file.rs
+reuse lint
+```
+
+Put your own name in the header of files you create; keep the existing lines and
+add yours when you substantially change a file. Generated files that would lose a
+header, such as `Cargo.lock`, are covered by `REUSE.toml` instead.
 
 ## Commit messages
 

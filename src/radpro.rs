@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Stan Grams <sjg@haxx.space>
+//
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 //! Client for the Rad Pro USB/serial protocol.
 //!
 //! The device speaks line-oriented ASCII at 115200 8N1. Requests are

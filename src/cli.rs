@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Stan Grams <sjg@haxx.space>
+//
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 use clap::Parser;
 
 /// Bridge a Rad Pro Geiger counter to MQTT, with Home Assistant discovery.
