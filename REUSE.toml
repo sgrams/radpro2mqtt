@@ -8,7 +8,7 @@ SPDX-PackageDownloadLocation = "https://github.com/sgrams/radpro2mqtt"
 # `LICENSES/AGPL-3.0-or-later.txt`, kept at the root because that is where
 # GitHub and most tooling look for it; its text must not be modified.
 [[annotations]]
-path = ["LICENSE", "Cargo.lock", ".gitignore"]
+path = ["LICENSE", "Cargo.lock", ".gitignore", "packaging/aur/.SRCINFO"]
 precedence = "aggregate"
 SPDX-FileCopyrightText = "2026 Stan Grams <sjg@haxx.space>"
 SPDX-License-Identifier = "AGPL-3.0-or-later"

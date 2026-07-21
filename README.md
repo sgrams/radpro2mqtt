@@ -39,6 +39,15 @@ counter over the poll interval: it is an exact mean rather than an estimate, and
 gets steadier the longer the interval. Graph the average, alert on the
 instantaneous one.
 
+## Install
+
+On Arch, `packaging/aur/` is a ready PKGBUILD that installs the binary, the
+systemd unit and `/etc/radpro2mqtt.env`:
+
+```sh
+cd packaging/aur && makepkg -si
+```
+
 ## Build
 
 Needs a stable Rust toolchain and a C toolchain for the serial crate; nothing else.

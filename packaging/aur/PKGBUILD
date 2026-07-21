@@ -1,0 +1,77 @@
+# SPDX-FileCopyrightText: 2026 Stan Grams <sjg@haxx.space>
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# Maintainer: Stan Grams <sjg@haxx.space>
+
+pkgname=radpro2mqtt-git
+pkgver=0.1.0.r0.g0000000
+pkgrel=1
+pkgdesc='Bridge a Rad Pro Geiger counter to MQTT with Home Assistant discovery'
+arch=('x86_64' 'aarch64' 'armv7h')
+url='https://github.com/sgrams/radpro2mqtt'
+license=('AGPL-3.0-or-later')
+depends=('gcc-libs' 'glibc')
+makedepends=('cargo' 'git')
+provides=('radpro2mqtt')
+conflicts=('radpro2mqtt')
+backup=('etc/radpro2mqtt.env')
+# TLS pulls in aws-lc-rs, whose C sources are compiled with the makepkg CFLAGS.
+# With LTO on, that archive is IR only and rust-lld cannot resolve its symbols.
+options=('!lto')
+source=("$pkgname::git+$url.git")
+sha256sums=('SKIP')
+
+pkgver() {
+	cd "$pkgname"
+	# Once the project is tagged, describe gives the version. Until then, build
+	# one from the crate version so that later tags still sort above it.
+	if git describe --long --tags >/dev/null 2>&1; then
+		git describe --long --tags | sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-/./g'
+	else
+		printf '%s.r%s.g%s' \
+			"$(sed -n '0,/^version = /s/^version = "\(.*\)"/\1/p' Cargo.toml)" \
+			"$(git rev-list --count HEAD)" \
+			"$(git rev-parse --short HEAD)"
+	fi
+}
+
+prepare() {
+	cd "$pkgname"
+	export RUSTUP_TOOLCHAIN=stable
+	cargo fetch --locked --target "$(rustc -vV | sed -n 's/^host: //p')"
+}
+
+build() {
+	cd "$pkgname"
+	export RUSTUP_TOOLCHAIN=stable
+	export CARGO_TARGET_DIR=target
+	cargo build --frozen --release
+}
+
+check() {
+	cd "$pkgname"
+	export RUSTUP_TOOLCHAIN=stable
+	cargo test --frozen
+}
+
+package() {
+	cd "$pkgname"
+
+	install -Dm755 target/release/radpro2mqtt "$pkgdir/usr/bin/radpro2mqtt"
+
+	# The shipped unit points at /usr/local/bin, which is where the README tells
+	# people to put a manually built binary. A packaged one lives in /usr/bin.
+	install -Dm644 packaging/radpro2mqtt.service \
+		"$pkgdir/usr/lib/systemd/system/radpro2mqtt.service"
+	sed -i 's|/usr/local/bin/radpro2mqtt|/usr/bin/radpro2mqtt|' \
+		"$pkgdir/usr/lib/systemd/system/radpro2mqtt.service"
+
+	# The service will not start without this file, so ship the template as the
+	# real thing and let pacman preserve any edits across upgrades. It holds the
+	# broker password, hence root-only.
+	install -Dm600 packaging/radpro2mqtt.env.example "$pkgdir/etc/radpro2mqtt.env"
+
+	install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
+	install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}

@@ -1,0 +1,21 @@
+pkgbase = radpro2mqtt-git
+	pkgdesc = Bridge a Rad Pro Geiger counter to MQTT with Home Assistant discovery
+	pkgver = 0.1.0.r0.g0000000
+	pkgrel = 1
+	url = https://github.com/sgrams/radpro2mqtt
+	arch = x86_64
+	arch = aarch64
+	arch = armv7h
+	license = AGPL-3.0-or-later
+	makedepends = cargo
+	makedepends = git
+	depends = gcc-libs
+	depends = glibc
+	provides = radpro2mqtt
+	conflicts = radpro2mqtt
+	options = !lto
+	backup = etc/radpro2mqtt.env
+	source = radpro2mqtt-git::git+https://github.com/sgrams/radpro2mqtt.git
+	sha256sums = SKIP
+
+pkgname = radpro2mqtt-git
