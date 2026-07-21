@@ -56,8 +56,20 @@ With the defaults (`--topic-prefix radpro`, `--node-id radpro`):
 State payload:
 
 ```json
-{"rate_cpm":18.45,"dose_rate_usvh":0.12,"pulse_count":1007,"tube_time_s":86400,"battery_voltage":4.05}
+{"rate_cpm":18.45,"avg_rate_cpm":19.2,"dose_rate_usvh":0.12,"pulse_count":1007,"tube_time_s":86400,"battery_voltage":4.05}
 ```
+
+There are two count rates, and they answer different questions. `rate_cpm` is the
+firmware's own figure, which responds quickly to a source being brought near the
+tube. `avg_rate_cpm` is the mean over the poll interval, computed here from the
+growth of the pulse counter; radioactive decay is a Poisson process, so at
+background levels a short window sees only a handful of counts and the
+instantaneous figure swings widely. The longer your `--interval`, the steadier
+`avg_rate_cpm` gets. Use it for graphs and history, and `rate_cpm` when you want
+the device to react.
+
+Because that mean needs two counter readings, nothing is published until the
+second poll of a connection — one interval after start-up.
 
 `dose_rate_usvh` is derived from the tube sensitivity reported by the device.
 Fields the firmware does not support are omitted, and no discovery config is

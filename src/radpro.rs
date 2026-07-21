@@ -8,7 +8,7 @@
 //! `GET <property>\r\n`; responses are `OK[ <value>]\r\n` or `ERROR\r\n`.
 //! See <https://github.com/Gissio/radpro/blob/main/docs/comm.md>.
 
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, anyhow, bail};
 use serde::Serialize;
@@ -36,12 +36,33 @@ pub struct DeviceInfo {
     pub device_id: String,
 }
 
+/// Minimum spacing between two pulse counts before their difference is worth
+/// turning into a rate; below this the elapsed time is mostly jitter.
+const MIN_RATE_WINDOW: Duration = Duration::from_millis(500);
+
+/// Counts per minute from the growth of the pulse counter over `elapsed`.
+///
+/// `None` when the window is too short to divide by, which also covers the
+/// first reading of a connection.
+fn derived_cpm(delta: u64, elapsed: Duration) -> Option<f64> {
+    if elapsed < MIN_RATE_WINDOW {
+        return None;
+    }
+    Some(delta as f64 * 60.0 / elapsed.as_secs_f64())
+}
+
 /// One poll of the device. Optional fields are omitted when the firmware does
 /// not implement the property.
 #[derive(Debug, Clone, Serialize)]
 pub struct Measurement {
-    /// Instantaneous count rate, counts per minute.
+    /// Instantaneous count rate as the firmware reports it, counts per minute.
     pub rate_cpm: f64,
+    /// Mean count rate over the poll interval, computed from the pulse counter.
+    ///
+    /// Absent on the first reading of a connection, and whenever the counter
+    /// has gone backwards, which means it was reset under us.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub avg_rate_cpm: Option<f64>,
     /// Equivalent dose rate in µSv/h, derived from the tube sensitivity.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub dose_rate_usvh: Option<f64>,
@@ -71,6 +92,8 @@ pub struct RadPro {
     timeout: Duration,
     /// cpm per µSv/h, read once at connect.
     sensitivity: Option<f64>,
+    /// Pulse count and the moment it was read, for the derived rate.
+    previous: Option<(u64, Instant)>,
 }
 
 impl RadPro {
@@ -87,6 +110,7 @@ impl RadPro {
             io: BufReader::new(stream),
             timeout,
             sensitivity: None,
+            previous: None,
         };
 
         // A sensitivity of zero would make the dose rate meaningless.
@@ -127,11 +151,27 @@ impl RadPro {
     pub async fn measure(&mut self) -> Result<Measurement> {
         let rate_cpm = self.get_f64("tubeRate").await?;
         let pulse_count = self.get_u64("tubePulseCount").await?;
+        let read_at = Instant::now();
         let tube_time = self.get_u64("tubeTime").await;
         let battery = self.get_f64("deviceBatteryVoltage").await;
 
+        // A counter that went backwards was reset on the device; start a fresh
+        // window rather than reporting a negative or absurd rate.
+        let avg_rate_cpm = match self.previous {
+            Some((previous, at)) if pulse_count >= previous => {
+                derived_cpm(pulse_count - previous, read_at.duration_since(at))
+            }
+            Some(_) => {
+                tracing::warn!("pulse counter went backwards, restarting the rate window");
+                None
+            }
+            None => None,
+        };
+        self.previous = Some((pulse_count, read_at));
+
         Ok(Measurement {
             rate_cpm,
+            avg_rate_cpm,
             dose_rate_usvh: self.sensitivity.map(|s| rate_cpm / s),
             pulse_count,
             tube_time_s: optional(tube_time),
@@ -178,5 +218,34 @@ impl RadPro {
             // pairing, so treat it as fatal and let the caller reconnect.
             None => bail!("unexpected response to `{command}`: {line:?}"),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn counts_over_a_window_become_a_rate_per_minute() {
+        // 30 counts in 30 s is 60 cpm.
+        assert_eq!(derived_cpm(30, Duration::from_secs(30)), Some(60.0));
+        // The same counts over a minute is half that.
+        assert_eq!(derived_cpm(30, Duration::from_secs(60)), Some(30.0));
+        // A quiet tube is a real answer, not a missing one.
+        assert_eq!(derived_cpm(0, Duration::from_secs(10)), Some(0.0));
+    }
+
+    #[test]
+    fn windows_too_short_to_divide_by_are_rejected() {
+        assert_eq!(derived_cpm(5, Duration::from_millis(499)), None);
+        assert_eq!(derived_cpm(5, Duration::ZERO), None);
+        assert!(derived_cpm(5, MIN_RATE_WINDOW).is_some());
+    }
+
+    #[test]
+    fn a_large_counter_does_not_lose_precision() {
+        // The counter is 32 bits wide and only ever grows.
+        let delta = u32::MAX as u64 - (u32::MAX as u64 - 120);
+        assert_eq!(derived_cpm(delta, Duration::from_secs(60)), Some(120.0));
     }
 }

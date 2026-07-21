@@ -235,6 +235,14 @@ async fn poll_device(cli: &Cli, publisher: &mut Publisher<'_>) -> Result<std::co
         let state = serde_json::to_value(&measurement)?;
         debug!(?measurement);
 
+        // The derived rate needs two pulse counts, so the first reading of a
+        // connection only primes it. Publishing here would announce an entity
+        // that has no value and then leave a gap in it.
+        if measurement.avg_rate_cpm.is_none() {
+            debug!("priming the derived rate, nothing published this tick");
+            continue;
+        }
+
         // Discovery is deferred until the first reading so that entities are
         // only created for properties this firmware actually reports.
         publisher.announce(info.as_ref(), &state).await?;

@@ -64,6 +64,11 @@ Two invariants worth preserving:
 - Backoff resets only after a link that survived `HEALTHY_LINK`, not after one
   that merely produced a reading — otherwise a device that connects and
   immediately drops reconnects once a second forever.
+- `avg_rate_cpm` needs two pulse counts, so the first reading of a connection
+  only primes it and `poll_device` publishes nothing that tick. That keeps every
+  published state complete: an entity is never announced without a value, and
+  the field never disappears from a payload it appeared in. A counter that goes
+  backwards (reset on the device) restarts the window the same way.
 
 ## Testing without hardware
 

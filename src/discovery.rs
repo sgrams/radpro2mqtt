@@ -37,6 +37,16 @@ const ENTITIES: &[Entity] = &[
         diagnostic: false,
     },
     Entity {
+        key: "avg_rate_cpm",
+        name: "Average count rate",
+        unit: "cpm",
+        device_class: None,
+        state_class: "measurement",
+        icon: Some("mdi:radioactive"),
+        precision: 2,
+        diagnostic: false,
+    },
+    Entity {
         key: "dose_rate_usvh",
         name: "Dose rate",
         unit: "µSv/h",
