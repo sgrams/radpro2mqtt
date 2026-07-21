@@ -55,9 +55,15 @@ Two invariants worth preserving:
   entities are only created for properties the firmware actually reports. Fields
   that came back absent are `None`, skipped in the state JSON, and filtered out of
   discovery.
-- Availability and discovery are retained and published once per serial link;
-  state is published every tick and retained only with `--retain`. The MQTT will
-  message covers process death.
+- `Publisher` is the only thing that publishes, and it suppresses anything the
+  broker already holds: discovery once per process, availability only on a
+  change. Everything it sends is retained, so a device that flaps would
+  otherwise produce a stream of identical retained messages. State is published
+  every tick and retained only with `--retain`. The MQTT will covers process
+  death.
+- Backoff resets only after a link that survived `HEALTHY_LINK`, not after one
+  that merely produced a reading — otherwise a device that connects and
+  immediately drops reconnects once a second forever.
 
 ## Testing without hardware
 

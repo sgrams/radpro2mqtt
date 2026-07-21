@@ -46,11 +46,19 @@ Fields the firmware does not support are omitted, and no discovery config is
 published for them. Run one instance per counter, with a distinct `--node-id` and
 `--client-id` for each.
 
+## Message rate
+
+One state message per `--interval` (default 10s, so 6/min). Discovery is sent once
+per run, and availability only when it changes, so an unstable device cannot flood
+the broker with retained messages.
+
 ## Behaviour
 
 The bridge keeps running when either link drops: MQTT reconnects via the client's
 event loop, and the serial port is reopened with exponential backoff (1s to 60s)
-while availability is published as `offline`.
+while availability is published as `offline`. Backoff only resets once a link has
+stayed up for a minute, so a device that connects and immediately drops backs off
+instead of retrying in a tight loop.
 
 ## License
 

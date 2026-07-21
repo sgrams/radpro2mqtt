@@ -6,21 +6,24 @@ mod cli;
 mod discovery;
 mod radpro;
 
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, anyhow, bail};
 use clap::Parser;
 use rumqttc::{AsyncClient, Event, LastWill, MqttOptions, Packet, QoS, Transport};
+use serde_json::Value;
 use tokio::time::{MissedTickBehavior, interval, sleep};
 use tracing::{debug, error, info, warn};
 use url::Url;
 
 use crate::cli::Cli;
-use crate::radpro::RadPro;
+use crate::radpro::{DeviceInfo, RadPro};
 
 /// Backoff bounds for reopening the serial port.
 const RECONNECT_MIN: Duration = Duration::from_secs(1);
 const RECONNECT_MAX: Duration = Duration::from_secs(60);
+/// How long a serial link must survive to count as healthy and earn a backoff reset.
+const HEALTHY_LINK: Duration = Duration::from_secs(60);
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -109,23 +112,89 @@ fn mqtt_options(cli: &Cli) -> Result<MqttOptions> {
     Ok(opts)
 }
 
+/// Publishes on behalf of the bridge, suppressing messages that would restate
+/// what the broker already holds. Everything it sends is retained, so a
+/// flapping device must not turn into a stream of identical publishes.
+struct Publisher<'a> {
+    cli: &'a Cli,
+    client: &'a AsyncClient,
+    /// Last availability published, `None` before the first one.
+    online: Option<bool>,
+    /// Discovery is retained by the broker, so once per process is enough.
+    announced: bool,
+}
+
+impl<'a> Publisher<'a> {
+    fn new(cli: &'a Cli, client: &'a AsyncClient) -> Self {
+        Self {
+            cli,
+            client,
+            online: None,
+            announced: false,
+        }
+    }
+
+    async fn set_availability(&mut self, online: bool) -> Result<()> {
+        if self.online == Some(online) {
+            return Ok(());
+        }
+        let payload = if online { "online" } else { "offline" };
+        self.client
+            .publish(
+                self.cli.availability_topic(),
+                QoS::AtLeastOnce,
+                true,
+                payload,
+            )
+            .await?;
+        self.online = Some(online);
+        debug!(payload, "published availability");
+        Ok(())
+    }
+
+    async fn announce(&mut self, info: Option<&DeviceInfo>, state: &Value) -> Result<()> {
+        if self.announced || self.cli.no_discovery {
+            return Ok(());
+        }
+        for (topic, payload) in discovery::configs(self.cli, info, state) {
+            self.client
+                .publish(&topic, QoS::AtLeastOnce, true, payload)
+                .await?;
+            debug!(%topic, "published discovery config");
+        }
+        self.announced = true;
+        Ok(())
+    }
+
+    async fn publish_state(&self, state: &Value) -> Result<()> {
+        self.client
+            .publish(
+                self.cli.state_topic(),
+                QoS::AtLeastOnce,
+                self.cli.retain,
+                serde_json::to_vec(state)?,
+            )
+            .await?;
+        Ok(())
+    }
+}
+
 /// Own the serial link: connect, publish, and reconnect with backoff forever.
 async fn bridge(cli: &Cli, client: &AsyncClient) -> Result<()> {
+    let mut publisher = Publisher::new(cli, client);
     let mut backoff = RECONNECT_MIN;
 
     loop {
         // `poll_device` only ever returns an error, so this binding is exhaustive.
-        let mut published = false;
-        let Err(e) = poll_device(cli, client, &mut published).await;
+        let started = Instant::now();
+        let Err(e) = poll_device(cli, &mut publisher).await;
 
         error!(error = ?e, port = %cli.port, "device link failed");
-        client
-            .publish(cli.availability_topic(), QoS::AtLeastOnce, true, "offline")
-            .await?;
+        publisher.set_availability(false).await?;
 
-        // A link that produced readings was healthy; only repeated failures to
-        // get that far should slow the retries down.
-        backoff = if published {
+        // Only a link that stayed up earns fast retries. A device that connects
+        // and immediately drops would otherwise reconnect once a second forever.
+        backoff = if started.elapsed() >= HEALTHY_LINK {
             RECONNECT_MIN
         } else {
             (backoff * 2).min(RECONNECT_MAX)
@@ -134,11 +203,7 @@ async fn bridge(cli: &Cli, client: &AsyncClient) -> Result<()> {
     }
 }
 
-async fn poll_device(
-    cli: &Cli,
-    client: &AsyncClient,
-    published: &mut bool,
-) -> Result<std::convert::Infallible> {
+async fn poll_device(cli: &Cli, publisher: &mut Publisher<'_>) -> Result<std::convert::Infallible> {
     let timeout = Duration::from_secs(cli.timeout);
     let mut device = RadPro::connect(&cli.port, cli.baud, timeout).await?;
     info!(port = %cli.port, "serial port open");
@@ -159,7 +224,6 @@ async fn poll_device(
         }
     };
 
-    let mut announced = false;
     let mut ticker = interval(Duration::from_secs(cli.interval));
     // A slow device must not cause a burst of catch-up polls.
     ticker.set_missed_tick_behavior(MissedTickBehavior::Delay);
@@ -172,31 +236,9 @@ async fn poll_device(
         debug!(?measurement);
 
         // Discovery is deferred until the first reading so that entities are
-        // only created for properties this firmware actually reports. Both
-        // messages are retained, so once per link is enough.
-        if !announced {
-            if !cli.no_discovery {
-                for (topic, payload) in discovery::configs(cli, info.as_ref(), &state) {
-                    client
-                        .publish(&topic, QoS::AtLeastOnce, true, payload)
-                        .await?;
-                    debug!(%topic, "published discovery config");
-                }
-            }
-            client
-                .publish(cli.availability_topic(), QoS::AtLeastOnce, true, "online")
-                .await?;
-            announced = true;
-        }
-
-        client
-            .publish(
-                cli.state_topic(),
-                QoS::AtLeastOnce,
-                cli.retain,
-                serde_json::to_vec(&state)?,
-            )
-            .await?;
-        *published = true;
+        // only created for properties this firmware actually reports.
+        publisher.announce(info.as_ref(), &state).await?;
+        publisher.set_availability(true).await?;
+        publisher.publish_state(&state).await?;
     }
 }
