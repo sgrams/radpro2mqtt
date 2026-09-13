@@ -1,0 +1,18 @@
+# SPDX-FileCopyrightText: 2026 OpenAI
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
+Source: radpro2mqtt
+Section: net
+Priority: optional
+Maintainer: Stan Grams <sjg@haxx.space>
+Build-Depends: debhelper-compat (= 13), build-essential
+Rules-Requires-Root: no
+Homepage: https://github.com/sgrams/radpro2mqtt
+
+Package: radpro2mqtt
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, ca-certificates
+Description: Bridge a Rad Pro Geiger counter to MQTT
+ Reads a Geiger counter running Rad Pro firmware over USB serial and publishes
+ measurements to MQTT, with automatic Home Assistant sensor discovery.

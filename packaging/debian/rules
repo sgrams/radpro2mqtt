@@ -1,0 +1,39 @@
+#!/usr/bin/make -f
+# SPDX-FileCopyrightText: 2026 OpenAI
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
+export CARGO_TARGET_DIR = $(CURDIR)/target
+# As in the Arch package, avoid C LTO archives that rust-lld cannot link.
+export DEB_BUILD_MAINT_OPTIONS = optimize=-lto
+
+%:
+	dh $@
+
+override_dh_auto_configure:
+	cargo fetch --locked
+
+override_dh_auto_build:
+	cargo build --frozen --release
+
+override_dh_auto_test:
+	cargo test --frozen
+
+override_dh_auto_clean:
+	# The build wrapper uses a disposable source tree.
+
+override_dh_auto_install:
+	install -Dm755 target/release/radpro2mqtt debian/radpro2mqtt/usr/bin/radpro2mqtt
+	install -Dm600 packaging/radpro2mqtt.env.example debian/radpro2mqtt/etc/radpro2mqtt.env
+	install -Dm644 README.md debian/radpro2mqtt/usr/share/doc/radpro2mqtt/README.md
+	install -Dm644 LICENSE debian/radpro2mqtt/usr/share/doc/radpro2mqtt/copyright
+	sed -e 's|/usr/local/bin/radpro2mqtt|/usr/bin/radpro2mqtt|' \
+	    -e 's/^SupplementaryGroups=uucp$$/SupplementaryGroups=dialout/' \
+	    packaging/radpro2mqtt.service > debian/radpro2mqtt.service
+
+override_dh_installsystemd:
+	dh_installsystemd --no-enable --no-start
+
+override_dh_fixperms:
+	dh_fixperms
+	chmod 0600 debian/radpro2mqtt/etc/radpro2mqtt.env
