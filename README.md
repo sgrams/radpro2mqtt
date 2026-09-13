@@ -48,6 +48,25 @@ systemd unit and `/etc/radpro2mqtt.env`:
 cd packaging/archlinux && makepkg -si
 ```
 
+On Debian, install the packaging tools and a current stable Rust toolchain
+(`cargo` and `rustc` on `PATH`), then build from the repository root:
+
+```sh
+sudo apt install build-essential debhelper dpkg-dev
+./packaging/debian/build.sh
+sudo apt install ./target/debian/radpro2mqtt_*.deb
+sudoedit /etc/radpro2mqtt.env
+sudo systemctl enable --now radpro2mqtt
+```
+
+The script builds and tests the current checkout using `Cargo.lock`; fetching
+dependencies requires network access. Packages land in `target/debian/`. If that
+directory contains older builds, pass the specific new `.deb` to `apt install`.
+The package installs the binary in `/usr/bin`, uses `dialout` for serial access,
+and preserves `/etc/radpro2mqtt.env` as a root-only configuration file across
+upgrades. The service is not enabled or started automatically; configure the port
+and broker before starting it.
+
 ## Build
 
 Needs a stable Rust toolchain and a C toolchain for the serial crate; nothing else.
@@ -151,7 +170,8 @@ journalctl -u radpro2mqtt -f
 
 The service runs unprivileged under a `DynamicUser` with access to nothing but a
 socket and `/dev/ttyACM*`, and joins the group owning that device — `uucp` as
-shipped, so change `SupplementaryGroups=` on Debian or Ubuntu.
+shipped, so change `SupplementaryGroups=` to `dialout` for a manual install on
+Debian or Ubuntu. The Debian package already makes this adjustment.
 
 ## Development
 
